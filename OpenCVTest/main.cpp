@@ -38,34 +38,47 @@ void markSeam(Mat& image, Mat& index, bool horizontal = false){
     }
 
 }
-void removeVerticalSeam(Mat &image,Mat&newImage, Mat &index){
-    int oldrows = image.rows;
-    int oldcols = image.cols;
-    newImage = Mat(oldrows, oldcols-1, image.type());
-    cout <<"New Image dims:" <<newImage.rows <<"cols:"<<newImage.cols<<endl;
-    //copy image to new destination
-    for (int i=0;i<oldrows;i++){
-        int idx = index.at<int32_t>(i,0);
-        bool skipped = false;
-        for (int j=0;j<oldcols;j++){
-            // check for curr pixel to skip
-            if (j==idx){
-                skipped = true;
-            }
-            else{
-                //normal
-                if (!skipped){
-                    Vec3b oldColor = image.at<cv::Vec3b>(i,j);
-                    newImage.at<Vec3b>(i,j) = oldColor;
-                }
-                else{
-                    Vec3b oldColor = image.at<cv::Vec3b>(i,j);
-                    newImage.at<Vec3b>(i,j-1) = oldColor;
-                }
-            }
+void removeVerticalSeam(Mat& image, Mat &newImage,Mat &index){
+    // copy all rows after seam index
+    unsigned int rows = image.rows;
+    unsigned int cols = image.cols;
+    for (unsigned int i=0; i<rows;i++){
+        unsigned idx = index.at<int32_t>(i,0);
+        for (unsigned j=idx+1;j<cols;j++){
+            Vec3b oldColor = image.at<cv::Vec3b>(i,j);
+            image.at<Vec3b>(i,j-1) = oldColor;
         }
     }
+    newImage = image(Rect(0,0,cols-1,rows));
 }
+//void removeVerticalSeam(Mat &image,Mat&newImage, Mat &index){
+//    int oldrows = image.rows;
+//    int oldcols = image.cols;
+//    newImage = Mat(oldrows, oldcols-1, image.type());
+//    cout <<"New Image dims:" <<newImage.rows <<"cols:"<<newImage.cols<<endl;
+//    //copy image to new destination
+//    for (int i=0;i<oldrows;i++){
+//        int idx = index.at<int32_t>(i,0);
+//        bool skipped = false;
+//        for (int j=0;j<oldcols;j++){
+//            // check for curr pixel to skip
+//            if (j==idx){
+//                skipped = true;
+//            }
+//            else{
+//                //normal
+//                if (!skipped){
+//                    Vec3b oldColor = image.at<cv::Vec3b>(i,j);
+//                    newImage.at<Vec3b>(i,j) = oldColor;
+//                }
+//                else{
+//                    Vec3b oldColor = image.at<cv::Vec3b>(i,j);
+//                    newImage.at<Vec3b>(i,j-1) = oldColor;
+//                }
+//            }
+//        }
+//    }
+//}
 void verticalSeamDP(Mat &image, Mat &M, Mat &dpIndex){
     
     //get dimensions
@@ -169,18 +182,14 @@ void shrinkHorizontal(Mat& input, Mat& output,bool debug = false)
     computeGradient(input,grad);
     verticalSeamDP(grad, M, dpIndex);
     removeVerticalSeam(input, output, dpIndex);
-    cvtColor(grad, gradTMP, CV_GRAY2BGR);
-    markSeam(input, dpIndex);
+    //cvtColor(grad, gradTMP, CV_GRAY2BGR);
+    Mat tmp = input.clone();
+    markSeam(tmp, dpIndex);
     //markSeam(gradTMP,dpIndex);
-    convertScaleAbs(M, dpImage,0.05);
-    imshow("tmpStep",input);
+   // convertScaleAbs(M, dpImage,0.05);
+    imshow("tmpStep",tmp);
     //imshow("dp",dpImage);
-    if (debug) {
-        imshow("tmpStep",gradTMP);
-        //cout <<"M"<<M<<endl;
-        //cvWaitKey(0);
-    }
-//    imshow("grad",grad);
+   //    imshow("grad",grad);
     cvWaitKey(1);
 }
 
@@ -192,18 +201,12 @@ void shrinkVertical(Mat &input, Mat& output){
 }
 void shrinkN(Mat& input, Mat& output,unsigned int N, bool rows=false){
     Mat tmp, tmp2;
-    bool debug = false;
     tmp = input.clone();
     for (unsigned int i=0;i<N;i++){
-        if (i==221)
-            debug = true;
-        else debug = false;
-        shrinkHorizontal(tmp, tmp2,debug);
+       
+        shrinkHorizontal(tmp, tmp2);
         tmp = tmp2.clone();
-        if (i==220){
-            cout <<"PROBLEM?!?!\n";
-            //cvWaitKey(0);
-        }
+    
     }
     output = tmp.clone();
 }
@@ -217,7 +220,7 @@ int main( int argc, char** argv ) {
     Mat imageOut;
     Mat frame, frameOut, frameColor;
     string windowName = "Window";
-    image = imread("iceland.jpg", IMREAD_COLOR); // Read the file
+    image = imread("tower.jpg", IMREAD_COLOR); // Read the file
     if(!image.data ) {
         
         
@@ -230,7 +233,10 @@ int main( int argc, char** argv ) {
     }
     
     Mat shrink;
-    shrinkN(image, shrink, 1024);
+    int numShrink = (0.3*image.cols);
+    cout <<numShrink<<endl;
+    
+    shrinkN(image, shrink, numShrink);
     namedWindow("1",WINDOW_AUTOSIZE);
     namedWindow("2",WINDOW_AUTOSIZE);
     imshow("1",image);
