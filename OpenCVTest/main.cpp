@@ -51,6 +51,19 @@ void removeVerticalSeam(Mat& image, Mat &newImage,Mat &index){
     }
     newImage = image(Rect(0,0,cols-1,rows));
 }
+void removeVerticalSeamGrad(Mat& image, Mat &newImage,Mat &index){
+    // copy all rows after seam index
+    unsigned int rows = image.rows;
+    unsigned int cols = image.cols;
+    for (unsigned int i=0; i<rows;i++){
+        unsigned idx = index.at<int32_t>(i,0);
+        for (unsigned j=idx+1;j<cols;j++){
+            uchar oldColor = image.at<uchar>(i,j);
+            image.at<uchar>(i,j-1) = oldColor;
+        }
+    }
+    newImage = image(Rect(0,0,cols-1,rows));
+}
 //void removeVerticalSeam(Mat &image,Mat&newImage, Mat &index){
 //    int oldrows = image.rows;
 //    int oldcols = image.cols;
@@ -183,13 +196,33 @@ void shrinkHorizontal(Mat& input, Mat& output,bool debug = false)
     verticalSeamDP(grad, M, dpIndex);
     removeVerticalSeam(input, output, dpIndex);
     //cvtColor(grad, gradTMP, CV_GRAY2BGR);
+    //Mat tmp = input.clone();
+    //markSeam(tmp, dpIndex);
+    //markSeam(gradTMP,dpIndex);
+   // convertScaleAbs(M, dpImage,0.05);
+    //imshow("tmpStep",output);
+    
+    //imshow("dp",dpImage);
+   //    imshow("grad",grad);
+    //cvWaitKey(1);
+}
+void shrinkHorizontal(Mat& input, Mat& output, Mat& grad)
+{
+    Mat gradtmp,M, dpIndex,dpImage,gradTMP;
+    //computeGradient(input,grad);
+    verticalSeamDP(grad, M, dpIndex);
+    removeVerticalSeam(input, output, dpIndex);
+    removeVerticalSeamGrad(grad, gradtmp, dpIndex);
+    grad = gradtmp;//.clone();
+    //cvtColor(grad, gradTMP, CV_GRAY2BGR);
     Mat tmp = input.clone();
     markSeam(tmp, dpIndex);
     //markSeam(gradTMP,dpIndex);
-   // convertScaleAbs(M, dpImage,0.05);
+    // convertScaleAbs(M, dpImage,0.05);
     imshow("tmpStep",tmp);
+    //imshow("gradStep",grad);
     //imshow("dp",dpImage);
-   //    imshow("grad",grad);
+    //    imshow("grad",grad);
     cvWaitKey(1);
 }
 
@@ -201,11 +234,13 @@ void shrinkVertical(Mat &input, Mat& output){
 }
 void shrinkN(Mat& input, Mat& output,unsigned int N, bool rows=false){
     Mat tmp, tmp2;
+    Mat grad;
+    computeGradient(input,grad);
     tmp = input.clone();
     for (unsigned int i=0;i<N;i++){
        
-        shrinkHorizontal(tmp, tmp2);
-        tmp = tmp2.clone();
+        shrinkHorizontal(tmp, tmp2,grad);
+        tmp = tmp2;//.clone();
     
     }
     output = tmp.clone();
@@ -220,7 +255,7 @@ int main( int argc, char** argv ) {
     Mat imageOut;
     Mat frame, frameOut, frameColor;
     string windowName = "Window";
-    image = imread("tower.jpg", IMREAD_COLOR); // Read the file
+    image = imread("iceland.jpg", IMREAD_COLOR); // Read the file
     if(!image.data ) {
         
         
@@ -233,7 +268,7 @@ int main( int argc, char** argv ) {
     }
     
     Mat shrink;
-    int numShrink = (0.3*image.cols);
+    int numShrink = (0.5*image.cols);
     cout <<numShrink<<endl;
     
     shrinkN(image, shrink, numShrink);
