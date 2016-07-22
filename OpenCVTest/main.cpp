@@ -15,6 +15,20 @@ using namespace cv;
 
 using namespace std;
 
+void imgRotate90clock(Mat &image, Mat &rotated){
+    Mat tmp;
+    transpose(image,tmp);
+    flip(tmp,rotated,1);
+    
+}
+
+
+void imgRotate90anticlock(Mat &image, Mat &rotated){
+    Mat tmp;
+    transpose(image,tmp);
+    flip(tmp,rotated,0);
+    
+}
 void markSeam(Mat& image, Mat& index, bool horizontal = false){
     for (int i=0;i<image.rows;i++){
         int column = index.at<int32_t>(i,0);
@@ -58,7 +72,11 @@ void verticalSeamDP(Mat &image, Mat &M, Mat &dpIndex){
     unsigned int m,n;
     n = image.rows;
     m = image.cols;
+    //M= zeros(n,m,CV_32S);
     M.create(Size(m,n),CV_32S);
+    for (unsigned int i=0;i<n;i++)
+        for (unsigned int j=0;j<m;j++)
+            M.at<int32_t>(i,j) = 0;
     dpIndex.create(Size(1,n),CV_32S);
     
     cout <<"Image:" << image.size()<<endl;
@@ -118,7 +136,7 @@ void verticalSeamDP(Mat &image, Mat &M, Mat &dpIndex){
         int topVal = M.at<int32_t>(i,topIdx);
         int smallestVal = leftVal;
         index = leftIdx;
-        if (topVal<=smallestVal){
+        if (topVal<smallestVal){
             smallestVal = topVal;
             index = topIdx;
         }
@@ -133,7 +151,7 @@ void verticalSeamDP(Mat &image, Mat &M, Mat &dpIndex){
 void computeGradient(Mat &image, Mat &grad)
 {
     Mat imageblur,image_gray, grad_x,grad_y,abs_grad_x,abs_grad_y;
-    GaussianBlur(image, imageblur, Size(5,5), 0,0,BORDER_DEFAULT);
+    GaussianBlur(image, imageblur, Size(9,9), 0,0,BORDER_DEFAULT);
     
     // convert2gray
     cvtColor(imageblur, image_gray, CV_BGR2GRAY);
@@ -145,38 +163,61 @@ void computeGradient(Mat &image, Mat &grad)
     convertScaleAbs(grad_y, abs_grad_y);
     addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0, grad);
 }
+void shrinkHorizontal(Mat& input, Mat& output,bool debug = false)
+{
+    Mat grad, M, dpIndex,dpImage,gradTMP;
+    computeGradient(input,grad);
+    verticalSeamDP(grad, M, dpIndex);
+    removeVerticalSeam(input, output, dpIndex);
+    cvtColor(grad, gradTMP, CV_GRAY2BGR);
+    markSeam(input, dpIndex);
+    //markSeam(gradTMP,dpIndex);
+    convertScaleAbs(M, dpImage,0.05);
+    imshow("tmpStep",input);
+    //imshow("dp",dpImage);
+    if (debug) {
+        imshow("tmpStep",gradTMP);
+        //cout <<"M"<<M<<endl;
+        //cvWaitKey(0);
+    }
+//    imshow("grad",grad);
+    cvWaitKey(1);
+}
+
+void shrinkVertical(Mat &input, Mat& output){
+    Mat inputRotated, outputRotated;
+    imgRotate90clock(input, inputRotated);
+    shrinkHorizontal(inputRotated, outputRotated);
+    imgRotate90anticlock(outputRotated, output);
+}
+void shrinkN(Mat& input, Mat& output,unsigned int N, bool rows=false){
+    Mat tmp, tmp2;
+    bool debug = false;
+    tmp = input.clone();
+    for (unsigned int i=0;i<N;i++){
+        if (i==221)
+            debug = true;
+        else debug = false;
+        shrinkHorizontal(tmp, tmp2,debug);
+        tmp = tmp2.clone();
+        if (i==220){
+            cout <<"PROBLEM?!?!\n";
+            //cvWaitKey(0);
+        }
+    }
+    output = tmp.clone();
+}
 int main( int argc, char** argv ) {
     
-    
+    namedWindow("tmpStep",WINDOW_AUTOSIZE);
+    namedWindow("dp",WINDOW_AUTOSIZE);
     Mat image, image_gray;
     Mat grad;
     Mat grad_x, grad_y,abs_grad_x,abs_grad_y;
     Mat imageOut;
     Mat frame, frameOut, frameColor;
     string windowName = "Window";
-    /*
-    VideoCapture capture;
-    capture.open(0);
-    namedWindow("Camera", WINDOW_AUTOSIZE);
-    namedWindow("Blur",WINDOW_AUTOSIZE);
-    bool stopIt = false;
-    while (capture.isOpened() && !stopIt) {
-        
-        capture >> frameColor;
-        cvtColor(frameColor, frame, COLOR_BGR2GRAY);
-        //GaussianBlur(frame, frameOut, Size(25,25), 0);
-        medianBlur(frame, frameOut, 5);
-        imshow("Camera",frame);
-        imshow("Blur",frameOut);
-    }
-    */
-    
-   image = imread("clubb .png", IMREAD_COLOR); // Read the file
-    
-    
-    
-    
-    
+    image = imread("iceland.jpg", IMREAD_COLOR); // Read the file
     if(!image.data ) {
         
         
@@ -188,6 +229,56 @@ int main( int argc, char** argv ) {
         
     }
     
+    Mat shrink;
+    shrinkN(image, shrink, 1024);
+    namedWindow("1",WINDOW_AUTOSIZE);
+    namedWindow("2",WINDOW_AUTOSIZE);
+    imshow("1",image);
+    imshow("2",shrink);
+    cvWaitKey(0);
+    exit(0);
+    int rowsIn = image.rows;
+    int colsIn = image.cols;
+    double scale = 0.6;
+    int rowsOut = scale * rowsIn;
+    int colsOut = scale * colsIn;
+    int rowsDelta = rowsIn - rowsOut;
+    int colsDelta = colsIn - colsOut;
+    int totalDelta = rowsDelta + colsDelta;
+    int currTotalDelta = 0;
+    int currColDelta = 0;
+    int currRowDelta = 0;
+    double aspectR = (double) colsIn / rowsIn;
+    cout <<"AR: "<<aspectR<<endl;
+    Mat imageAR, imageTMP;
+    imageAR = image.clone();
+    while (currTotalDelta<totalDelta){
+        double tmpAR = (double)(colsIn-currColDelta) / (rowsIn-currRowDelta);
+        
+        if (tmpAR<aspectR){
+            //shrink rows
+            currRowDelta++;
+            shrinkVertical(imageAR, imageTMP);
+            
+        }
+        else {
+            //shrink cols
+            currColDelta++;
+            shrinkHorizontal(imageAR, imageTMP);
+        }
+        currTotalDelta = currRowDelta + currColDelta;
+        
+        cout <<currTotalDelta<<". "<<currRowDelta<<","<<currColDelta<<" AR:"<<tmpAR<<endl;
+        imageAR = imageTMP.clone();
+    }
+    cout <<"("<<rowsIn<<","<<colsIn<<") => * 0.6 => ("<<rowsOut<<","<<colsOut<<")"<<endl;
+    namedWindow("AR",WINDOW_AUTOSIZE);
+    namedWindow("BeforeAR",WINDOW_AUTOSIZE);
+    imshow("AR", imageAR);
+    imshow("BeforeAR",image);
+    
+    cvWaitKey(0);
+    exit(0);
     // gaussianBlur
     
     namedWindow(windowName, WINDOW_AUTOSIZE ); // Create a window for display.
@@ -200,7 +291,9 @@ int main( int argc, char** argv ) {
     //compute Seam
     Mat dpM,dpIndex,image2;
     Mat origImage;
+    
     origImage = image.clone();
+    imgRotate90clock(origImage, image);
     for (int i=0;i<300 ;i++){
         computeGradient(image, grad);
         verticalSeamDP(grad, dpM, dpIndex);
@@ -211,7 +304,7 @@ int main( int argc, char** argv ) {
         Mat imageSeam = image.clone();
         markSeam(imageSeam,dpIndex);
         image2.copyTo(image);
-        convertScaleAbs(dpM, dpMImage);
+        convertScaleAbs(dpM, dpMImage,0.1);
         imshow("debug",imageSeam  );
         imshow("grad", grad);
         imshow("dpm",dpMImage);
